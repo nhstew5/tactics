@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Soccer Tactics Pro</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2e7d32">
+
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; margin: 0; padding-top: 10px; overflow: hidden; height: 100vh; }
+    
+    .controls { margin-bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; z-index: 100; padding: 0 10px; }
+    
+    button { 
+      padding: 10px 14px; background: #2e7d32; color: white; border: 2px solid #4caf50; 
+      border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; touch-action: manipulation; transition: 0.2s;
+    }
+    
+    button:active { transform: scale(0.95); background: #1b5e20; }
+    #drawBtn.active { background: #d32f2f; border-color: #ff5252; }
+    #toggleOpponent { background: #b71c1c; border-color: #f44336; }
+
+    #pitch-container { position: relative; width: 90vw; height: 125vw; max-width: 380px; max-height: 520px; }
+
+    #pitch {
+      width: 100%; height: 100%; background-color: #388e3c; border: 3px solid white;
+      position: relative; border-radius: 5px;
+      background-image: linear-gradient(white 2px, transparent 2px), radial-gradient(circle at 50% 50%, transparent 40px, white 41px, white 42px, transparent 43px);
+      background-size: 100% 50%, 100% 100%;
+      touch-action: none;
+    }
+
+    /* Goal Posts */
+    .goal { position: absolute; left: 35%; width: 30%; height: 4px; background: white; z-index: 2; }
+    .goal.bottom { bottom: -4px; }
+    .goal.top { top: -4px; }
+
+    /* Field Markings */
+    .box-18, .box-6 { position: absolute; left: 15%; width: 70%; height: 18%; border: 2px solid white; border-bottom: none; pointer-events: none; bottom: 0; }
+    .box-6 { left: 35%; width: 30%; height: 6%; }
+    .box-18.top { top: 0; bottom: auto; border-bottom: 2px solid white; border-top: none; }
+    .box-6.top { top: 0; bottom: auto; border-bottom: 2px solid white; border-top: none; }
+
+    #drawCanvas { position: absolute; top: 0; left: 0; z-index: 5; touch-action: none; pointer-events: none; }
+    #drawCanvas.active { pointer-events: auto; cursor: crosshair; }
+
+    .player {
+      width: 32px; height: 32px; background: radial-gradient(circle, #2196f3, #0d47a1);
+      color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      position: absolute; font-size: 12px; font-weight: bold; border: 2px solid white;
+      transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10; touch-action: none; user-select: none;
+    }
+    .opponent { background: radial-gradient(circle, #f44336, #b71c1c); display: none; }
+    .ball { width: 18px; height: 18px; background: white; border-radius: 50%; position: absolute; border: 2px solid black; z-index: 11; transition: none; }
+  </style>
+</head>
+<body>
+
+<div class="controls">
+  <button id="btn4123">4-1-2-3</button>
+  <button id="btn451">4-5-1</button>
+  <button id="toggleOpponent">Opponent: OFF</button>
+  <button id="drawBtn">Draw: OFF</button>
+  <button onclick="clearCanvas()">Clear</button>
+</div>
+
+<div id="pitch-container">
+  <canvas id="drawCanvas"></canvas>
+  <div id="pitch">
+    <div class="goal top"></div>
+    <div class="box-18 top"></div><div class="box-6 top"></div>
+    
+    <div class="box-18"></div><div class="box-6"></div>
+    <div class="goal bottom"></div>
+
+    <div id="p1" class="player">1</div><div id="p2" class="player">2</div>
+    <div id="p3" class="player">3</div><div id="p4" class="player">4</div>
+    <div id="p5" class="player">5</div><div id="p6" class="player">6</div>
+    <div id="p7" class="player">7</div><div id="p8" class="player">8</div>
+    <div id="p9" class="player">9</div><div id="p10" class="player">10</div>
+    <div id="p11" class="player">11</div>
+
+    <div id="o1" class="player opponent">1</div><div id="o2" class="player opponent">2</div>
+    <div id="o3" class="player opponent">3</div><div id="o4" class="player opponent">4</div>
+    <div id="o5" class="player opponent">5</div><div id="o6" class="player opponent">6</div>
+    <div id="o7" class="player opponent">7</div><div id="o8" class="player opponent">8</div>
+    <div id="o9" class="player opponent">9</div><div id="o10" class="player opponent">10</div>
+    <div id="o11" class="player opponent">11</div>
+
+    <div id="ball" class="ball" style="top:50%; left:48.5%;"></div>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('drawCanvas');
+  const ctx = canvas.getContext('2d');
+  const drawBtn = document.getElementById('drawBtn');
+  const oppBtn = document.getElementById('toggleOpponent');
+  let isDrawing = false, drawingEnabled = false, opponentOn = false, activeElement = null;
+
+  function resizeCanvas() {
+    canvas.width = document.getElementById('pitch').offsetWidth;
+    canvas.height = document.getElementById('pitch').offsetHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('load', resizeCanvas);
+
+  // Buttons Logic
+  oppBtn.addEventListener('pointerdown', (e) => {
+    opponentOn = !opponentOn;
+    oppBtn.textContent = opponentOn ? "Opponent: ON" : "Opponent: OFF";
+    document.querySelectorAll('.opponent').forEach(p => p.style.display = opponentOn ? 'flex' : 'none');
+    if(opponentOn) setOpponentFormation();
+  });
+
+  drawBtn.addEventListener('pointerdown', (e) => {
+    drawingEnabled = !drawingEnabled;
+    drawBtn.textContent = drawingEnabled ? "Draw: ON" : "Draw: OFF";
+    drawBtn.classList.toggle('active');
+    canvas.classList.toggle('active');
+  });
+
+  // Universal Drawing
+  const getPos = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const startDraw = (e) => { if(!drawingEnabled) return; isDrawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); };
+  const moveDraw = (e) => { if(!isDrawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = "yellow"; ctx.lineWidth = 3; ctx.stroke(); };
+  canvas.addEventListener('mousedown', startDraw); canvas.addEventListener('touchstart', startDraw);
+  window.addEventListener('mousemove', moveDraw); window.addEventListener('touchmove', moveDraw);
+  window.addEventListener('mouseup', () => isDrawing = false); window.addEventListener('touchend', () => isDrawing = false);
+
+  function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+  // Formations
+  const formations = {
+    f4123: [{id:'p1',t:88,l:45},{id:'p2',t:72,l:75},{id:'p3',t:75,l:55},{id:'p4',t:75,l:35},{id:'p5',t:72,l:15},{id:'p6',t:62,l:45},{id:'p8',t:52,l:58},{id:'p10',t:52,l:32},{id:'p7',t:25,l:78},{id:'p9',t:18,l:45},{id:'p11',t:25,l:12}],
+    f451: [{id:'p1',t:88,l:45},{id:'p2',t:75,l:75},{id:'p3',t:78,l:55},{id:'p4',t:78,l:35},{id:'p5',t:75,l:15},{id:'p7',t:58,l:80},{id:'p8',t:60,l:58},{id:'p6',t:62,l:45},{id:'p10',t:60,l:32},{id:'p11',t:58,l:10},{id:'p9',t:28,l:45}]
+  };
+
+  function setFormation(type) {
+    formations[type].forEach(pos => {
+      const el = document.getElementById(pos.id);
+      el.style.top = pos.t + '%'; el.style.left = pos.l + '%';
+    });
+  }
+  function setOpponentFormation() {
+    const oppPos = [{id:'o1',t:5,l:45},{id:'o2',t:22,l:72},{id:'o3',t:18,l:55},{id:'o4',t:18,l:35},{id:'o5',t:22,l:18},{id:'o6',t:35,l:45},{id:'o8',t:42,l:58},{id:'o10',t:42,l:32},{id:'o7',t:58,l:75},{id:'o9',t:62,l:45},{id:'o11',t:58,l:15}];
+    oppPos.forEach(p => { const el = document.getElementById(p.id); el.style.top = p.t+'%'; el.style.left = p.l+'%'; });
+  }
+
+  document.getElementById('btn4123').addEventListener('click', () => setFormation('f4123'));
+  document.getElementById('btn451').addEventListener('click', () => setFormation('f451'));
+
+  // Universal Dragging
+  const startDrag = (e) => { if(drawingEnabled) return; activeElement = e.target; activeElement.style.transition = 'none'; };
+  const moveDrag = (e) => {
+    if(!activeElement || drawingEnabled) return;
+    const pitch = document.getElementById('pitch').getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    activeElement.style.left = (((clientX - pitch.left) / pitch.width) * 100 - 4) + '%';
+    activeElement.style.top = (((clientY - pitch.top) / pitch.height) * 100 - 4) + '%';
+  };
+  const endDrag = () => { if(activeElement) activeElement.style.transition = 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'; activeElement = null; };
+
+  document.querySelectorAll('.player, .ball').forEach(el => {
+    el.addEventListener('mousedown', startDrag); el.addEventListener('touchstart', startDrag);
+  });
+  window.addEventListener('mousemove', moveDrag); window.addEventListener('touchmove', moveDrag, {passive: false});
+  window.addEventListener('mouseup', endDrag); window.addEventListener('touchend', endDrag);
+
+  window.onload = () => { resizeCanvas(); setFormation('f4123'); };
+</script>
+</body>
+</html>
